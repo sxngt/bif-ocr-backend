@@ -45,9 +45,17 @@ uv run python -m scripts.init_db
 # 4-a) 개발 서버 실행 (자동 리로드, 포트 13001)
 ./scripts/run.sh
 
-# 4-b) 배포용 실행 (워커 다중, --no-dev 의존성)
-./scripts/deploy.sh
-# 환경 변수로 조정 가능:
+# 4-b) 배포용 실행 (워커 다중, --no-dev 의존성) — 백그라운드 데몬
+./scripts/deploy.sh                                   # start (기본 명령)
+./scripts/deploy.sh start -p 13001 -w 4 -l info       # 플래그로 조정
+./scripts/deploy.sh status                            # PID / 업타임 확인
+./scripts/deploy.sh logs -f                           # 실시간 로그
+./scripts/deploy.sh logs -n 500                       # 최근 500줄
+./scripts/deploy.sh restart --no-sync                 # 의존성 동기화 없이 재기동
+./scripts/deploy.sh stop                              # 중지
+./scripts/deploy.sh help                              # 전체 옵션 보기
+
+# 환경 변수도 지원 (플래그가 우선):
 #   HOST=0.0.0.0 PORT=13001 WORKERS=4 LOG_LEVEL=info ./scripts/deploy.sh
 ```
 
