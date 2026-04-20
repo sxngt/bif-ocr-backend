@@ -22,11 +22,16 @@ cp .env.example .env
 # 3) (선택) DB 초기화 — 앱 시작 시 자동 생성되지만 수동으로도 가능
 uv run python -m scripts.init_db
 
-# 4) 서버 실행
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# 4-a) 개발 서버 실행 (자동 리로드, 포트 13001)
+./scripts/run.sh
+
+# 4-b) 배포용 실행 (워커 다중, --no-dev 의존성)
+./scripts/deploy.sh
+# 환경 변수로 조정 가능:
+#   HOST=0.0.0.0 PORT=13001 WORKERS=4 LOG_LEVEL=info ./scripts/deploy.sh
 ```
 
-Swagger UI: http://localhost:8000/docs
+Swagger UI: http://localhost:13001/docs
 
 ## API 개요
 
