@@ -3,6 +3,7 @@ import io
 
 import pypdfium2 as pdfium
 from openai import OpenAI
+from PIL import Image, ImageOps
 
 from app.config import settings
 
@@ -37,6 +38,33 @@ SIMPLIFY_SYSTEM_PROMPT = (
 
 PDF_RENDER_SCALE = 2.0  # 1.0 = 72dpi, 2.0 ≈ 144dpi (OCR 정확도 ↑)
 PDF_PAGE_LIMIT = 20  # 비용/시간 보호용 상한
+IMAGE_MAX_SIDE = 2000  # OpenAI Vision 비용/안정성 고려 상한 (긴 변 기준)
+
+
+def _normalize_image(image_bytes: bytes) -> tuple[bytes, str]:
+    """OCR 에 넘기기 전에 이미지를 정규화한다.
+
+    - EXIF Orientation 반영: 아이폰 카메라로 찍은 세로 사진은 실제 픽셀은 가로이고
+      회전 정보만 EXIF 에 들어있는데, OpenAI Vision 이 이 회전을 자동 반영하지 않아서
+      텍스트가 누워 보이고 "이 이미지를 처리할 수 없습니다" 같은 거절 응답이 나온다.
+      `ImageOps.exif_transpose` 로 실제 픽셀을 회전시키고 EXIF 를 제거한다.
+    - 과대 크기 다운스케일: 긴 변을 IMAGE_MAX_SIDE 에 맞춘다 (비용/응답시간 보호).
+    - JPEG 로 통일 재인코딩: 포맷 관련 엣지 케이스를 제거하고 EXIF/ICC 등 불필요한
+      메타데이터를 제거한다.
+    """
+    img = Image.open(io.BytesIO(image_bytes))
+    img = ImageOps.exif_transpose(img)
+
+    if max(img.size) > IMAGE_MAX_SIDE:
+        img.thumbnail((IMAGE_MAX_SIDE, IMAGE_MAX_SIDE), Image.Resampling.LANCZOS)
+
+    if img.mode not in ("RGB", "L"):
+        # RGBA/P/LA 등은 JPEG 로 인코딩할 수 없으므로 변환
+        img = img.convert("RGB")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90, optimize=True)
+    return buf.getvalue(), "image/jpeg"
 
 
 def _ocr_single_image(image_bytes: bytes, mime_type: str) -> str:
@@ -61,8 +89,12 @@ def _ocr_single_image(image_bytes: bytes, mime_type: str) -> str:
 
 
 def extract_text_from_image(image_bytes: bytes, mime_type: str) -> str:
-    """단일 이미지에서 텍스트를 추출한다."""
-    return _ocr_single_image(image_bytes, mime_type)
+    """단일 이미지에서 텍스트를 추출한다.
+
+    업로드된 원본을 그대로 넘기지 않고 `_normalize_image` 로 정규화한 뒤 전달한다.
+    """
+    normalized_bytes, normalized_mime = _normalize_image(image_bytes)
+    return _ocr_single_image(normalized_bytes, normalized_mime)
 
 
 def _pdf_pages_to_png_bytes(pdf_bytes: bytes) -> list[bytes]:
