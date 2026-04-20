@@ -3,6 +3,26 @@
 경계선 지능 아동을 위한 OCR 기반 텍스트 변환 서비스 백엔드.
 FastAPI + SQLite + SQLAlchemy + OpenAI API.
 
+강민서 인턴의 캡스톤 디자인 개발환경 지원을 위한 PoC 백엔드.
+
+## 배포 환경 (Dev)
+
+| 항목 | 값 |
+|------|------|
+| Base URL | `http://15.164.30.134:13001` |
+| Swagger UI | http://15.164.30.134:13001/docs |
+| Redoc | http://15.164.30.134:13001/redoc |
+| OpenAPI JSON | http://15.164.30.134:13001/openapi.json |
+| Health | http://15.164.30.134:13001/health |
+
+프런트엔드 `.env` 예시:
+
+```env
+VITE_API_BASE_URL=http://15.164.30.134:13001
+```
+
+> 현재 HTTP 로 노출되어 있어 HTTPS 페이지에서는 Mixed Content 차단이 발생할 수 있습니다. 프런트도 HTTP 로 띄우거나, 이후 ALB + ACM 으로 HTTPS 전환을 검토하세요.
+
 ## 요구 사항
 
 - Python >= 3.11
@@ -31,7 +51,7 @@ uv run python -m scripts.init_db
 #   HOST=0.0.0.0 PORT=13001 WORKERS=4 LOG_LEVEL=info ./scripts/deploy.sh
 ```
 
-Swagger UI: http://localhost:13001/docs
+로컬 Swagger UI: http://localhost:13001/docs (배포된 개발 서버는 위 **배포 환경 (Dev)** 섹션 참고)
 
 ## API 개요
 
