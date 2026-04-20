@@ -1,0 +1,81 @@
+# BIF-OCR Backend
+
+경계선 지능 아동을 위한 OCR 기반 텍스트 변환 서비스 백엔드.
+FastAPI + SQLite + SQLAlchemy + OpenAI API.
+
+## 요구 사항
+
+- Python >= 3.11
+- [uv](https://docs.astral.sh/uv/)
+- OpenAI API Key
+
+## 시작하기
+
+```bash
+# 1) 의존성 설치
+uv sync
+
+# 2) 환경 변수 설정
+cp .env.example .env
+# .env 파일을 열어 OPENAI_API_KEY 등 설정
+
+# 3) (선택) DB 초기화 — 앱 시작 시 자동 생성되지만 수동으로도 가능
+uv run python -m scripts.init_db
+
+# 4) 서버 실행
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Swagger UI: http://localhost:8000/docs
+
+## API 개요
+
+### Auth
+| Method | Path | 설명 |
+|--------|------|------|
+| POST | `/auth/signup` | 회원가입 (username, password, private_question, private_answer) |
+| POST | `/auth/login` | 로그인 (3-factor: username + password + private_answer) → JWT |
+| GET  | `/auth/me` | 현재 로그인 유저 정보 |
+
+### Usage Logs
+| Method | Path | 설명 |
+|--------|------|------|
+| POST   | `/usage-logs` | 이미지 업로드 → OCR → 단순화 → 저장 (multipart: `title`, `file`) |
+| GET    | `/usage-logs` | 내 기록 목록 (soft-delete 제외, 최신순) |
+| GET    | `/usage-logs/{id}` | 기록 상세 |
+| PATCH  | `/usage-logs/{id}` | 제목 수정 |
+| DELETE | `/usage-logs/{id}` | Soft delete |
+
+### Meta
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | `/health` | 헬스 체크 |
+| GET | `/private-questions` | 나만의 질문 Enum 목록 (프론트 렌더링용 label 포함) |
+
+## 구조
+
+```
+app/
+├── main.py             # FastAPI 엔트리포인트
+├── config.py           # pydantic-settings 기반 설정
+├── database.py         # SQLAlchemy 엔진/세션
+├── enums.py            # PrivateQuestion Enum
+├── core/
+│   ├── security.py     # 비밀번호 해시 + JWT
+│   └── deps.py         # get_current_user
+├── models/             # User, UsageLog ORM
+├── schemas/            # Pydantic DTO
+├── routers/
+│   ├── auth.py         # /auth/*
+│   └── usage_logs.py   # /usage-logs/*
+└── services/
+    └── openai_service.py  # OCR + 텍스트 단순화
+```
+
+## 구현 메모
+
+- **OCR**: OpenAI Vision (`gpt-4o` 등) 멀티모달 입력으로 이미지 → 원문 텍스트 추출.
+- **단순화**: `gpt-4o-mini` 기본. BIF 아동을 위한 프롬프트로 짧은 문장 + 마크다운 구조화.
+- **인증**: 3-factor (username + password + private_answer). PRD 6.2 준수.
+- **Soft Delete**: `is_deleted` 플래그. DELETE 엔드포인트는 flag만 변경.
+- **S3**: PRD에서 Pending 상태이므로 `s3_key` 필드만 nullable로 준비, 실제 업로드 로직은 미구현.
