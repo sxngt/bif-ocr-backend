@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import UsageLog, User
-from app.schemas.usage_log import UsageLogResponse
+from app.schemas.usage_log import UsageLogListItem, UsageLogResponse, UsageLogUpdate
 from app.services.openai_service import extract_text_from_image, simplify_text
 
 router = APIRouter(prefix="/usage-logs", tags=["usage-logs"])
@@ -65,3 +66,57 @@ async def create_usage_log(
     db.commit()
     db.refresh(log)
     return log
+
+
+@router.get("", response_model=list[UsageLogListItem])
+def list_usage_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[UsageLog]:
+    stmt = (
+        select(UsageLog)
+        .where(UsageLog.user_id == current_user.id, UsageLog.is_deleted.is_(False))
+        .order_by(desc(UsageLog.created_at))
+    )
+    return list(db.scalars(stmt).all())
+
+
+@router.get("/{log_id}", response_model=UsageLogResponse)
+def get_usage_log(
+    log_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UsageLog:
+    log = db.get(UsageLog, log_id)
+    if log is None or log.is_deleted or log.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="기록을 찾을 수 없습니다.")
+    return log
+
+
+@router.patch("/{log_id}", response_model=UsageLogResponse)
+def update_usage_log(
+    log_id: str,
+    payload: UsageLogUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UsageLog:
+    log = db.get(UsageLog, log_id)
+    if log is None or log.is_deleted or log.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="기록을 찾을 수 없습니다.")
+    log.title = payload.title
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+@router.delete("/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_usage_log(
+    log_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    log = db.get(UsageLog, log_id)
+    if log is None or log.is_deleted or log.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="기록을 찾을 수 없습니다.")
+    log.is_deleted = True
+    db.commit()
