@@ -45,7 +45,7 @@ Swagger UI: http://localhost:13001/docs
 ### Usage Logs
 | Method | Path | 설명 |
 |--------|------|------|
-| POST   | `/usage-logs` | 이미지 업로드 → OCR → 단순화 → 저장 (multipart: `title`, `file`) |
+| POST   | `/usage-logs` | 이미지/PDF 업로드 → OCR → 단순화 → 저장 (multipart: `title`, `file`) |
 | GET    | `/usage-logs` | 내 기록 목록 (soft-delete 제외, 최신순) |
 | GET    | `/usage-logs/{id}` | 기록 상세 |
 | PATCH  | `/usage-logs/{id}` | 제목 수정 |
@@ -79,7 +79,10 @@ app/
 
 ## 구현 메모
 
-- **OCR**: OpenAI Vision (`gpt-4o` 등) 멀티모달 입력으로 이미지 → 원문 텍스트 추출.
+- **OCR**: OpenAI Vision (`gpt-4o` 등) 멀티모달 입력.
+  - 이미지(`image/png|jpeg|webp|gif`)는 그대로 OCR.
+  - PDF는 `pypdfium2` 로 페이지별 PNG 렌더링(기본 2배 스케일) 후 페이지별 OCR → 이어 붙임.
+  - 비용/시간 보호용으로 **최대 20페이지**까지만 처리 (`PDF_PAGE_LIMIT`).
 - **단순화**: `gpt-4o-mini` 기본. BIF 아동을 위한 프롬프트로 짧은 문장 + 마크다운 구조화.
 - **인증**: 3-factor (username + password + private_answer). PRD 6.2 준수.
 - **Soft Delete**: `is_deleted` 플래그. DELETE 엔드포인트는 flag만 변경.
