@@ -6,11 +6,17 @@ from app.core.deps import get_current_user
 from app.database import get_db
 from app.models import UsageLog, User
 from app.schemas.usage_log import UsageLogListItem, UsageLogResponse, UsageLogUpdate
-from app.services.openai_service import extract_text_from_image, simplify_text
+from app.services.openai_service import (
+    extract_text_from_image,
+    extract_text_from_pdf,
+    simplify_text,
+)
 
 router = APIRouter(prefix="/usage-logs", tags=["usage-logs"])
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
+PDF_TYPES = {"application/pdf"}
+ALLOWED_TYPES = ALLOWED_IMAGE_TYPES | PDF_TYPES
 
 
 @router.post("", response_model=UsageLogResponse, status_code=status.HTTP_201_CREATED)
@@ -20,21 +26,25 @@ async def create_usage_log(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UsageLog:
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
+    if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"지원하지 않는 파일 형식입니다: {file.content_type}",
+            detail=f"지원하지 않는 파일 형식입니다: {file.content_type} "
+            "(이미지 또는 application/pdf 만 허용)",
         )
 
-    image_bytes = await file.read()
-    if not image_bytes:
+    file_bytes = await file.read()
+    if not file_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="빈 파일은 업로드할 수 없습니다.",
         )
 
     try:
-        extracted = extract_text_from_image(image_bytes, file.content_type)
+        if file.content_type in PDF_TYPES:
+            extracted = extract_text_from_pdf(file_bytes)
+        else:
+            extracted = extract_text_from_image(file_bytes, file.content_type)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

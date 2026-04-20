@@ -1,5 +1,7 @@
 import base64
+import io
 
+import pypdfium2 as pdfium
 from openai import OpenAI
 
 from app.config import settings
@@ -33,9 +35,11 @@ SIMPLIFY_SYSTEM_PROMPT = (
     "출력은 마크다운 형식으로만 작성하세요."
 )
 
+PDF_RENDER_SCALE = 2.0  # 1.0 = 72dpi, 2.0 ≈ 144dpi (OCR 정확도 ↑)
+PDF_PAGE_LIMIT = 20  # 비용/시간 보호용 상한
 
-def extract_text_from_image(image_bytes: bytes, mime_type: str) -> str:
-    """이미지에서 텍스트를 추출한다 (OCR)."""
+
+def _ocr_single_image(image_bytes: bytes, mime_type: str) -> str:
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     data_url = f"data:{mime_type};base64,{b64}"
 
@@ -54,6 +58,37 @@ def extract_text_from_image(image_bytes: bytes, mime_type: str) -> str:
         temperature=0,
     )
     return (response.choices[0].message.content or "").strip()
+
+
+def extract_text_from_image(image_bytes: bytes, mime_type: str) -> str:
+    """단일 이미지에서 텍스트를 추출한다."""
+    return _ocr_single_image(image_bytes, mime_type)
+
+
+def _pdf_pages_to_png_bytes(pdf_bytes: bytes) -> list[bytes]:
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    pages: list[bytes] = []
+    total = min(len(pdf), PDF_PAGE_LIMIT)
+    for i in range(total):
+        bitmap = pdf[i].render(scale=PDF_RENDER_SCALE)
+        pil_image = bitmap.to_pil()
+        buf = io.BytesIO()
+        pil_image.save(buf, format="PNG")
+        pages.append(buf.getvalue())
+    return pages
+
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """PDF의 각 페이지를 이미지로 렌더링해 페이지별 OCR 후 이어 붙인다."""
+    pages = _pdf_pages_to_png_bytes(pdf_bytes)
+    if not pages:
+        return ""
+    chunks: list[str] = []
+    for idx, png_bytes in enumerate(pages, start=1):
+        text = _ocr_single_image(png_bytes, "image/png")
+        if text:
+            chunks.append(f"## [페이지 {idx}]\n{text}")
+    return "\n\n".join(chunks)
 
 
 def simplify_text(raw_text: str) -> str:
