@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.error_handlers import http_exception_handler, validation_exception_handler
 from app.database import Base, engine
 from app.enums import PrivateQuestion
 from app.routers import auth, usage_logs
@@ -116,6 +119,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 
 app.include_router(auth.router)
 app.include_router(usage_logs.router)
